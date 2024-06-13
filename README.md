@@ -12,4 +12,5 @@ Since *Big Machines* cost a lot of money to buy, and even rent, this model will 
 TLDR; making a small GPT for learn & fun.*
 
 *fun not included
+
 ### Currently Training the first version !
