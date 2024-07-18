@@ -1,0 +1,496 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "initial_id",
+   "metadata": {
+    "collapsed": true,
+    "jupyter": {
+     "outputs_hidden": true
+    }
+   },
+   "outputs": [],
+   "source": [
+    "!pip install tiktoken datasets tokenizers -q"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "411060a89cb83e3",
+   "metadata": {},
+   "source": [
+    "# PARAMETERS"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "id": "781e688df6bcbcb2",
+   "metadata": {
+    "ExecuteTime": {
+     "end_time": "2024-07-18T10:13:08.553459Z",
+     "start_time": "2024-07-18T10:13:08.548202Z"
+    }
+   },
+   "outputs": [],
+   "source": [
+    "TOKENIZER_NAME = \"Celestializer2048\"\n",
+    "CONTEXT_SIZE = 2048"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "9968ce27eb29318f",
+   "metadata": {},
+   "source": [
+    "# Heavy Stuff Loading\n",
+    "Here, code that loads the dataset, or other intensive parts"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "id": "93bbae25da045e6d",
+   "metadata": {
+    "ExecuteTime": {
+     "end_time": "2024-07-16T22:10:50.293490Z",
+     "start_time": "2024-07-16T22:10:49.771069Z"
+    }
+   },
+   "outputs": [],
+   "source": [
+    "from datasets import load_dataset\n",
+    "#load_dataset(\"Open-Orca/OpenOrca\")\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "25834770c2926837",
+   "metadata": {
+    "jp-MarkdownHeadingCollapsed": true
+   },
+   "source": [
+    "# The Dataset\n",
+    "Here code to manage the dataset generator and generator to tfds transform"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "id": "a644b9436079bbd5",
+   "metadata": {
+    "ExecuteTime": {
+     "end_time": "2024-07-16T22:10:52.886120Z",
+     "start_time": "2024-07-16T22:10:51.606512Z"
+    }
+   },
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "2024-07-17 00:10:51.766254: I tensorflow/core/util/port.cc:111] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.\n",
+      "2024-07-17 00:10:51.768124: I tensorflow/tsl/cuda/cudart_stub.cc:28] Could not find cuda drivers on your machine, GPU will not be used.\n",
+      "2024-07-17 00:10:51.795739: E tensorflow/compiler/xla/stream_executor/cuda/cuda_dnn.cc:9342] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered\n",
+      "2024-07-17 00:10:51.795775: E tensorflow/compiler/xla/stream_executor/cuda/cuda_fft.cc:609] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered\n",
+      "2024-07-17 00:10:51.795794: E tensorflow/compiler/xla/stream_executor/cuda/cuda_blas.cc:1518] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered\n",
+      "2024-07-17 00:10:51.800360: I tensorflow/tsl/cuda/cudart_stub.cc:28] Could not find cuda drivers on your machine, GPU will not be used.\n",
+      "2024-07-17 00:10:51.800783: I tensorflow/core/platform/cpu_feature_guard.cc:182] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.\n",
+      "To enable the following instructions: AVX2 AVX512F AVX512_VNNI FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.\n",
+      "2024-07-17 00:10:52.382541: W tensorflow/compiler/tf2tensorrt/utils/py_utils.cc:38] TF-TRT Warning: Could not find TensorRT\n"
+     ]
+    }
+   ],
+   "source": [
+    "import tokenizers\n",
+    "import tensorflow as tf\n",
+    "# Dataset generator and processing\n",
+    "# Assign speaker IDs\n",
+    "SYSTEM_ID = 1\n",
+    "USER_ID = 2\n",
+    "MODEL_ID = 3\n",
+    "PADDING_ID = 0\n",
+    "\n",
+    "tokenizer = tokenizers.Tokenizer.from_file(\"Celestializer2048.json\")\n",
+    "END_OF_TEXT_TOKEN = 1\n",
+    "\n",
+    "def lenreg(list, size=1024, padding_idx=0):\n",
+    "    return (list + [padding_idx for _ in range(size)])[:size]\n",
+    "\n",
+    "def create_speaker_context(seq_length, speaker_id, context_size, padding_idx=0):\n",
+    "    return [speaker_id if i < seq_length and i != padding_idx else padding_idx for i in range(context_size)]\n",
+    "\n",
+    "def generator(context_size=CONTEXT_SIZE):  # Default context window size to 2048\n",
+    "    print(\"[GENERATOR] Loading dataset and tokenizer\")\n",
+    "    dataset = load_dataset(\"Open-Orca/OpenOrca\")\n",
+    "    print(\"[GENERATOR] dataset loaded\")\n",
+    "    \n",
+    "    print(\"[GENERATOR] tokenizer loaded\")\n",
+    "    tensorize = tf.convert_to_tensor\n",
+    "\n",
+    "    for features in dataset[\"train\"]:\n",
+    "        sp = tokenizer.encode(features[\"system_prompt\"]).ids\n",
+    "        sp.append(END_OF_TEXT_TOKEN)\n",
+    "        up = tokenizer.encode(features[\"question\"]).ids\n",
+    "        up.append(END_OF_TEXT_TOKEN)\n",
+    "        ma = tokenizer.encode(features[\"response\"]).ids\n",
+    "        ma.append(END_OF_TEXT_TOKEN)\n",
+    "        #print(features[\"system_prompt\"], features[\"question\"], features[\"response\"])\n",
+    "        token_context = sp + up\n",
+    "        speaker_context = [SYSTEM_ID]*len(sp) + [USER_ID]*len(up)\n",
+    "\n",
+    "        for ma_token in ma:\n",
+    "            regulated_token_context = tensorize(lenreg(token_context, size=context_size), dtype=tf.int64)\n",
+    "            regulated_speaker_context = tensorize(lenreg(speaker_context, size=context_size, padding_idx=0), dtype=tf.int64)\n",
+    "            yield (regulated_token_context, regulated_speaker_context), ma_token\n",
+    "            token_context.append(ma_token)\n",
+    "            speaker_context.append(MODEL_ID)\n",
+    "\n",
+    "\n",
+    "output_signature = (\n",
+    "    (\n",
+    "        tf.TensorSpec(shape=(CONTEXT_SIZE), dtype=tf.int64),\n",
+    "        tf.TensorSpec(shape=(CONTEXT_SIZE), dtype=tf.int64)\n",
+    "    ),\n",
+    "    tf.TensorSpec(shape=(), dtype=tf.int64)\n",
+    ")\n",
+    "dataset = tf.data.Dataset.from_generator(generator, output_signature=output_signature, args=(CONTEXT_SIZE,))\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "id": "ea7304bd553254b8",
+   "metadata": {
+    "ExecuteTime": {
+     "end_time": "2024-07-16T22:11:10.811152Z",
+     "start_time": "2024-07-16T22:10:53.163329Z"
+    }
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "[GENERATOR] Loading dataset and tokenizer\n",
+      "[GENERATOR] dataset loaded\n",
+      "[GENERATOR] tokenizer loaded\n",
+      "((<tf.Tensor: shape=(2048,), dtype=int64, numpy=array([   1, 1013,  597, ...,    0,    0,    0])>, <tf.Tensor: shape=(2048,), dtype=int64, numpy=array([1, 2, 2, ..., 0, 0, 0])>), <tf.Tensor: shape=(), dtype=int64, numpy=1682>)\n"
+     ]
+    },
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "/home/rohethan/.local/lib/python3.10/site-packages/datasets/table.py:1421: FutureWarning: promote has been superseded by mode='default'.\n",
+      "  table = cls._concat_blocks(blocks, axis=0)\n"
+     ]
+    }
+   ],
+   "source": [
+    "for elem in dataset.take(1):\n",
+    "    print(elem)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "95b798e218d1a669",
+   "metadata": {
+    "jp-MarkdownHeadingCollapsed": true
+   },
+   "source": [
+    "# The model\n",
+    "Here the code to define the model builder functions."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 21,
+   "id": "300e298904511ecb",
+   "metadata": {
+    "ExecuteTime": {
+     "end_time": "2024-07-16T22:36:07.113643Z",
+     "start_time": "2024-07-16T22:36:07.107458Z"
+    }
+   },
+   "outputs": [],
+   "source": [
+    "import tensorflow as tf\n",
+    "from tensorflow.keras import layers as L\n",
+    "\n",
+    "def build_llm_model(context_window, vocab_size, embedding_size, num_attention_blocks, num_heads, dense_attention_units, dropout_rate=0.15, normalization_epsilon=1e-3):\n",
+    "    \n",
+    "    context_input_tokens = tf.keras.Input(shape=(context_window,), dtype=tf.int32)\n",
+    "    speaker_input_tokens = tf.keras.Input(shape=(context_window,), dtype=tf.int32)\n",
+    "    \n",
+    "    context_embedding_layer = tf.keras.layers.Embedding(vocab_size, embedding_size)  \n",
+    "    \n",
+    "    embedded_contexts = context_embedding_layer(context_input_tokens)\n",
+    "    embedded_speakers = tf.keras.layers.Embedding(4, embedding_size)(speaker_input_tokens)\n",
+    "    embeds = embedded_contexts + embedded_speakers\n",
+    "    \n",
+    "    for i in range(num_attention_blocks):\n",
+    "        attention = L.MultiHeadAttention(num_heads=num_heads, key_dim=embedding_size)(embeds, embeds)\n",
+    "        attention = L.LayerNormalization(epsilon=normalization_epsilon)(attention)\n",
+    "        attention = L.Dropout(dropout_rate)(attention)\n",
+    "        \n",
+    "        dense1 = L.Dense(dense_attention_units, activation='sigmoid')(attention)\n",
+    "        dense1 = L.Dropout(dropout_rate)(dense1)\n",
+    "        dense1 = L.LayerNormalization(epsilon=normalization_epsilon)(dense1)\n",
+    "        \n",
+    "        dense2 = L.Dense(embedding_size, activation='sigmoid')(dense1)\n",
+    "        dense2 = L.Dropout(dropout_rate)(dense2)\n",
+    "        dense2 = L.LayerNormalization(epsilon=normalization_epsilon)(dense2)\n",
+    "        \n",
+    "        embeds = embeds + dense2\n",
+    "        \n",
+    "    final_embedding = embeds[:,-1]\n",
+    "    embeddings = tf.expand_dims(context_embedding_layer.embeddings, axis=0)\n",
+    "    embeddings = tf.tile(embeddings, [tf.shape(final_embedding)[0], 1, 1])\n",
+    "    \n",
+    "    \n",
+    "    final_output = tf.keras.layers.Dot(axes=-1)([final_embedding, embeddings])\n",
+    "    final_output = tf.keras.layers.Softmax()(final_output)\n",
+    "    \n",
+    "    model = tf.keras.Model(inputs=[context_input_tokens, speaker_input_tokens], outputs=final_output)\n",
+    "    optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3)\n",
+    "    loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False)\n",
+    "    model.compile(loss=loss, optimizer=optimizer, metrics=['accuracy'])\n",
+    "    return model\n",
+    "        "
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "9efff6652adabdac",
+   "metadata": {},
+   "source": [
+    "# The Training\n",
+    "Cells related to prepping to train and train"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 30,
+   "id": "5bca7a0cf2cc1a8d",
+   "metadata": {
+    "ExecuteTime": {
+     "end_time": "2024-07-16T22:44:27.407969Z",
+     "start_time": "2024-07-16T22:44:23.773853Z"
+    }
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Model: \"model_11\"\n",
+      "__________________________________________________________________________________________________\n",
+      " Layer (type)                Output Shape                 Param #   Connected to                  \n",
+      "==================================================================================================\n",
+      " input_27 (InputLayer)       [(None, 2048)]               0         []                            \n",
+      "                                                                                                  \n",
+      " input_28 (InputLayer)       [(None, 2048)]               0         []                            \n",
+      "                                                                                                  \n",
+      " embedding_26 (Embedding)    (None, 2048, 10)             20480     ['input_27[0][0]']            \n",
+      "                                                                                                  \n",
+      " embedding_27 (Embedding)    (None, 2048, 10)             40        ['input_28[0][0]']            \n",
+      "                                                                                                  \n",
+      " tf.__operators__.add_143 (  (None, 2048, 10)             0         ['embedding_26[0][0]',        \n",
+      " TFOpLambda)                                                         'embedding_27[0][0]']        \n",
+      "                                                                                                  \n",
+      " multi_head_attention_130 (  (None, 2048, 10)             870       ['tf.__operators__.add_143[0][\n",
+      " MultiHeadAttention)                                                0]',                          \n",
+      "                                                                     'tf.__operators__.add_143[0][\n",
+      "                                                                    0]']                          \n",
+      "                                                                                                  \n",
+      " layer_normalization_390 (L  (None, 2048, 10)             20        ['multi_head_attention_130[0][\n",
+      " ayerNormalization)                                                 0]']                          \n",
+      "                                                                                                  \n",
+      " dropout_390 (Dropout)       (None, 2048, 10)             0         ['layer_normalization_390[0][0\n",
+      "                                                                    ]']                           \n",
+      "                                                                                                  \n",
+      " dense_260 (Dense)           (None, 2048, 20)             220       ['dropout_390[0][0]']         \n",
+      "                                                                                                  \n",
+      " dropout_391 (Dropout)       (None, 2048, 20)             0         ['dense_260[0][0]']           \n",
+      "                                                                                                  \n",
+      " layer_normalization_391 (L  (None, 2048, 20)             40        ['dropout_391[0][0]']         \n",
+      " ayerNormalization)                                                                               \n",
+      "                                                                                                  \n",
+      " dense_261 (Dense)           (None, 2048, 10)             210       ['layer_normalization_391[0][0\n",
+      "                                                                    ]']                           \n",
+      "                                                                                                  \n",
+      " dropout_392 (Dropout)       (None, 2048, 10)             0         ['dense_261[0][0]']           \n",
+      "                                                                                                  \n",
+      " layer_normalization_392 (L  (None, 2048, 10)             20        ['dropout_392[0][0]']         \n",
+      " ayerNormalization)                                                                               \n",
+      "                                                                                                  \n",
+      " tf.__operators__.add_144 (  (None, 2048, 10)             0         ['tf.__operators__.add_143[0][\n",
+      " TFOpLambda)                                                        0]',                          \n",
+      "                                                                     'layer_normalization_392[0][0\n",
+      "                                                                    ]']                           \n",
+      "                                                                                                  \n",
+      " multi_head_attention_131 (  (None, 2048, 10)             870       ['tf.__operators__.add_144[0][\n",
+      " MultiHeadAttention)                                                0]',                          \n",
+      "                                                                     'tf.__operators__.add_144[0][\n",
+      "                                                                    0]']                          \n",
+      "                                                                                                  \n",
+      " layer_normalization_393 (L  (None, 2048, 10)             20        ['multi_head_attention_131[0][\n",
+      " ayerNormalization)                                                 0]']                          \n",
+      "                                                                                                  \n",
+      " dropout_393 (Dropout)       (None, 2048, 10)             0         ['layer_normalization_393[0][0\n",
+      "                                                                    ]']                           \n",
+      "                                                                                                  \n",
+      " dense_262 (Dense)           (None, 2048, 20)             220       ['dropout_393[0][0]']         \n",
+      "                                                                                                  \n",
+      " dropout_394 (Dropout)       (None, 2048, 20)             0         ['dense_262[0][0]']           \n",
+      "                                                                                                  \n",
+      " layer_normalization_394 (L  (None, 2048, 20)             40        ['dropout_394[0][0]']         \n",
+      " ayerNormalization)                                                                               \n",
+      "                                                                                                  \n",
+      " dense_263 (Dense)           (None, 2048, 10)             210       ['layer_normalization_394[0][0\n",
+      "                                                                    ]']                           \n",
+      "                                                                                                  \n",
+      " dropout_395 (Dropout)       (None, 2048, 10)             0         ['dense_263[0][0]']           \n",
+      "                                                                                                  \n",
+      " layer_normalization_395 (L  (None, 2048, 10)             20        ['dropout_395[0][0]']         \n",
+      " ayerNormalization)                                                                               \n",
+      "                                                                                                  \n",
+      " tf.__operators__.add_145 (  (None, 2048, 10)             0         ['tf.__operators__.add_144[0][\n",
+      " TFOpLambda)                                                        0]',                          \n",
+      "                                                                     'layer_normalization_395[0][0\n",
+      "                                                                    ]']                           \n",
+      "                                                                                                  \n",
+      " tf.__operators__.getitem_1  (None, 10)                   0         ['tf.__operators__.add_145[0][\n",
+      " 8 (SlicingOpLambda)                                                0]']                          \n",
+      "                                                                                                  \n",
+      " tf.compat.v1.shape_6 (TFOp  (2,)                         0         ['tf.__operators__.getitem_18[\n",
+      " Lambda)                                                            0][0]']                       \n",
+      "                                                                                                  \n",
+      " tf.__operators__.getitem_1  ()                           0         ['tf.compat.v1.shape_6[0][0]']\n",
+      " 9 (SlicingOpLambda)                                                                              \n",
+      "                                                                                                  \n",
+      " tf.tile_6 (TFOpLambda)      (None, 2048, 10)             0         ['tf.__operators__.getitem_19[\n",
+      "                                                                    0][0]']                       \n",
+      "                                                                                                  \n",
+      " dot_12 (Dot)                (None, 2048)                 0         ['tf.__operators__.getitem_18[\n",
+      "                                                                    0][0]',                       \n",
+      "                                                                     'tf.tile_6[0][0]']           \n",
+      "                                                                                                  \n",
+      " softmax_10 (Softmax)        (None, 2048)                 0         ['dot_12[0][0]']              \n",
+      "                                                                                                  \n",
+      "==================================================================================================\n",
+      "Total params: 23280 (90.94 KB)\n",
+      "Trainable params: 23280 (90.94 KB)\n",
+      "Non-trainable params: 0 (0.00 Byte)\n",
+      "__________________________________________________________________________________________________\n"
+     ]
+    }
+   ],
+   "source": [
+    "from tensorflow.keras import mixed_precision\n",
+    "#mixed_precision.set_global_policy('mixed_float16')\n",
+    "\n",
+    "model = build_llm_model(CONTEXT_SIZE,\n",
+    "                        tokenizer.get_vocab_size(),\n",
+    "                        10, # embedding size\n",
+    "                        2, # Number of blocks\n",
+    "                        2, # attention heads\n",
+    "                        20)# Dense units\n",
+    "\n",
+    "model.summary()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 32,
+   "id": "ceb31404133e48dd",
+   "metadata": {
+    "ExecuteTime": {
+     "end_time": "2024-07-16T22:44:27.731504Z",
+     "start_time": "2024-07-16T22:44:27.409313Z"
+    }
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Epoch 1/100\n"
+     ]
+    },
+    {
+     "ename": "ValueError",
+     "evalue": "in user code:\n\n    File \"/home/rohethan/.local/lib/python3.10/site-packages/keras/src/engine/training.py\", line 1377, in train_function  *\n        return step_function(self, iterator)\n    File \"/home/rohethan/.local/lib/python3.10/site-packages/keras/src/engine/training.py\", line 1360, in step_function  **\n        outputs = model.distribute_strategy.run(run_step, args=(data,))\n    File \"/home/rohethan/.local/lib/python3.10/site-packages/keras/src/engine/training.py\", line 1349, in run_step  **\n        outputs = model.train_step(data)\n    File \"/home/rohethan/.local/lib/python3.10/site-packages/keras/src/engine/training.py\", line 1126, in train_step\n        y_pred = self(x, training=True)\n    File \"/home/rohethan/.local/lib/python3.10/site-packages/keras/src/utils/traceback_utils.py\", line 70, in error_handler\n        raise e.with_traceback(filtered_tb) from None\n\n    ValueError: Exception encountered when calling layer 'query' (type EinsumDense).\n    \n    Shape must be rank 3 but is rank 7\n    \t for 0th input and equation: abc,cde->abde for '{{node model_11/multi_head_attention_130/query/einsum/Einsum}} = Einsum[N=2, T=DT_FLOAT, equation=\"abc,cde->abde\"](model_11/tf.__operators__.add_143/Add, model_11/multi_head_attention_130/query/einsum/Einsum/ReadVariableOp)' with input shapes: [?,?,?,?,?,2048,10], [10,2,10].\n    \n    Call arguments received by layer 'query' (type EinsumDense):\n      • inputs=tf.Tensor(shape=(None, None, None, None, None, 2048, 10), dtype=float32)\n",
+     "output_type": "error",
+     "traceback": [
+      "\u001b[0;31m---------------------------------------------------------------------------\u001b[0m",
+      "\u001b[0;31mValueError\u001b[0m                                Traceback (most recent call last)",
+      "Cell \u001b[0;32mIn[32], line 17\u001b[0m\n\u001b[1;32m     15\u001b[0m dataset \u001b[38;5;241m=\u001b[39m dataset\u001b[38;5;241m.\u001b[39mbatch(\u001b[38;5;241m4\u001b[39m)\u001b[38;5;241m.\u001b[39mprefetch(\u001b[38;5;241m2\u001b[39m)\n\u001b[1;32m     16\u001b[0m \u001b[38;5;28;01mwith\u001b[39;00m tf\u001b[38;5;241m.\u001b[39mdevice(\u001b[38;5;124m'\u001b[39m\u001b[38;5;124m/CPU:0\u001b[39m\u001b[38;5;124m'\u001b[39m):\n\u001b[0;32m---> 17\u001b[0m     \u001b[43mmodel\u001b[49m\u001b[38;5;241;43m.\u001b[39;49m\u001b[43mfit\u001b[49m\u001b[43m(\u001b[49m\u001b[43mdataset\u001b[49m\u001b[43m,\u001b[49m\u001b[43m \u001b[49m\u001b[43mepochs\u001b[49m\u001b[38;5;241;43m=\u001b[39;49m\u001b[38;5;241;43m100\u001b[39;49m\u001b[43m,\u001b[49m\u001b[43m \u001b[49m\u001b[43msteps_per_epoch\u001b[49m\u001b[38;5;241;43m=\u001b[39;49m\u001b[38;5;241;43m2048\u001b[39;49m\u001b[43m,\u001b[49m\u001b[43m \u001b[49m\u001b[43mverbose\u001b[49m\u001b[38;5;241;43m=\u001b[39;49m\u001b[38;5;241;43m1\u001b[39;49m\u001b[43m,\u001b[49m\u001b[43m \u001b[49m\u001b[43mbatch_size\u001b[49m\u001b[38;5;241;43m=\u001b[39;49m\u001b[38;5;241;43m4\u001b[39;49m\u001b[43m,\u001b[49m\u001b[43m \u001b[49m\u001b[43mcallbacks\u001b[49m\u001b[38;5;241;43m=\u001b[39;49m\u001b[43m[\u001b[49m\u001b[43mtensorboard_callback\u001b[49m\u001b[43m,\u001b[49m\u001b[43m \u001b[49m\u001b[43mnan_stop\u001b[49m\u001b[43m,\u001b[49m\u001b[43m \u001b[49m\u001b[43mcheckpoint_callback\u001b[49m\u001b[43m]\u001b[49m\u001b[43m)\u001b[49m\n\u001b[1;32m     18\u001b[0m     model\u001b[38;5;241m.\u001b[39msave(\u001b[38;5;124m\"\u001b[39m\u001b[38;5;124mtest\u001b[39m\u001b[38;5;124m\"\u001b[39m)\n",
+      "File \u001b[0;32m~/.local/lib/python3.10/site-packages/keras/src/utils/traceback_utils.py:70\u001b[0m, in \u001b[0;36mfilter_traceback.<locals>.error_handler\u001b[0;34m(*args, **kwargs)\u001b[0m\n\u001b[1;32m     67\u001b[0m     filtered_tb \u001b[38;5;241m=\u001b[39m _process_traceback_frames(e\u001b[38;5;241m.\u001b[39m__traceback__)\n\u001b[1;32m     68\u001b[0m     \u001b[38;5;66;03m# To get the full stack trace, call:\u001b[39;00m\n\u001b[1;32m     69\u001b[0m     \u001b[38;5;66;03m# `tf.debugging.disable_traceback_filtering()`\u001b[39;00m\n\u001b[0;32m---> 70\u001b[0m     \u001b[38;5;28;01mraise\u001b[39;00m e\u001b[38;5;241m.\u001b[39mwith_traceback(filtered_tb) \u001b[38;5;28;01mfrom\u001b[39;00m \u001b[38;5;28;01mNone\u001b[39;00m\n\u001b[1;32m     71\u001b[0m \u001b[38;5;28;01mfinally\u001b[39;00m:\n\u001b[1;32m     72\u001b[0m     \u001b[38;5;28;01mdel\u001b[39;00m filtered_tb\n",
+      "File \u001b[0;32m/tmp/__autograph_generated_filefnl3e71d.py:15\u001b[0m, in \u001b[0;36mouter_factory.<locals>.inner_factory.<locals>.tf__train_function\u001b[0;34m(iterator)\u001b[0m\n\u001b[1;32m     13\u001b[0m \u001b[38;5;28;01mtry\u001b[39;00m:\n\u001b[1;32m     14\u001b[0m     do_return \u001b[38;5;241m=\u001b[39m \u001b[38;5;28;01mTrue\u001b[39;00m\n\u001b[0;32m---> 15\u001b[0m     retval_ \u001b[38;5;241m=\u001b[39m ag__\u001b[38;5;241m.\u001b[39mconverted_call(ag__\u001b[38;5;241m.\u001b[39mld(step_function), (ag__\u001b[38;5;241m.\u001b[39mld(\u001b[38;5;28mself\u001b[39m), ag__\u001b[38;5;241m.\u001b[39mld(iterator)), \u001b[38;5;28;01mNone\u001b[39;00m, fscope)\n\u001b[1;32m     16\u001b[0m \u001b[38;5;28;01mexcept\u001b[39;00m:\n\u001b[1;32m     17\u001b[0m     do_return \u001b[38;5;241m=\u001b[39m \u001b[38;5;28;01mFalse\u001b[39;00m\n",
+      "\u001b[0;31mValueError\u001b[0m: in user code:\n\n    File \"/home/rohethan/.local/lib/python3.10/site-packages/keras/src/engine/training.py\", line 1377, in train_function  *\n        return step_function(self, iterator)\n    File \"/home/rohethan/.local/lib/python3.10/site-packages/keras/src/engine/training.py\", line 1360, in step_function  **\n        outputs = model.distribute_strategy.run(run_step, args=(data,))\n    File \"/home/rohethan/.local/lib/python3.10/site-packages/keras/src/engine/training.py\", line 1349, in run_step  **\n        outputs = model.train_step(data)\n    File \"/home/rohethan/.local/lib/python3.10/site-packages/keras/src/engine/training.py\", line 1126, in train_step\n        y_pred = self(x, training=True)\n    File \"/home/rohethan/.local/lib/python3.10/site-packages/keras/src/utils/traceback_utils.py\", line 70, in error_handler\n        raise e.with_traceback(filtered_tb) from None\n\n    ValueError: Exception encountered when calling layer 'query' (type EinsumDense).\n    \n    Shape must be rank 3 but is rank 7\n    \t for 0th input and equation: abc,cde->abde for '{{node model_11/multi_head_attention_130/query/einsum/Einsum}} = Einsum[N=2, T=DT_FLOAT, equation=\"abc,cde->abde\"](model_11/tf.__operators__.add_143/Add, model_11/multi_head_attention_130/query/einsum/Einsum/ReadVariableOp)' with input shapes: [?,?,?,?,?,2048,10], [10,2,10].\n    \n    Call arguments received by layer 'query' (type EinsumDense):\n      • inputs=tf.Tensor(shape=(None, None, None, None, None, 2048, 10), dtype=float32)\n"
+     ]
+    }
+   ],
+   "source": [
+    "from tensorflow.keras.callbacks import *\n",
+    "# TensorBoard callback\n",
+    "tensorboard_callback = TensorBoard(log_dir=\"./logs\", histogram_freq=1)\n",
+    "\n",
+    "# Terminate training on nan. (Don't spend additional compute ressources)\n",
+    "nan_stop = TerminateOnNaN()\n",
+    "\n",
+    "# ModelCheckpoint callback\n",
+    "checkpoint_callback = ModelCheckpoint(\n",
+    "    filepath=\"./checkpoints/\" + \"ckpt_{epoch:03d}-{loss:.3f}.ckpt\",\n",
+    "    save_weights_only=True,\n",
+    "    save_freq=4096,# Save the model every 2 epochs\n",
+    "    verbose=1)\n",
+    "\n",
+    "dataset = dataset.batch(4).prefetch(2)\n",
+    "with tf.device('/CPU:0'):\n",
+    "    model.fit(dataset, epochs=100, steps_per_epoch=2048, verbose=1, batch_size=4, callbacks=[tensorboard_callback, nan_stop, checkpoint_callback])\n",
+    "    model.save(\"test\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "44e901e3-144a-41d1-bd37-dc96a18868d6",
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "d9035bc9-402a-4675-ab66-41a6ef310753",
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3 (ipykernel)",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.10.12"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
