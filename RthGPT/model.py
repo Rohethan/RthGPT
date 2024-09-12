@@ -58,5 +58,5 @@ def build_model(context_length:int, embedding_size:int, vocab_size:int, n_attent
     return model
 
 if __name__ == '__main__':
-    model = build_model(727, 8, 50, 3, 1, 2)
+    model = build_model(2048, 256, 4096, 32, 4, 4)
     model.summary()
