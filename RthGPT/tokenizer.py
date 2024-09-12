@@ -29,3 +29,6 @@ class RthTokenizer:
         )
         self.tokenizer.train_from_iterator(generator, trainer=self.trainer)
         self.tokenizer.save(save_name)
+
+    def tokenize(self, seq):
+        return self.tokenizer.encode(seq)

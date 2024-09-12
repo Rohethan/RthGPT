@@ -53,6 +53,7 @@ def build_model(context_length:int, embedding_size:int, vocab_size:int, n_attent
 
         prob_selector_layer = ProbabilitySelector(embedding_layer)
         token_probability = prob_selector_layer(predicted_embed)
+        token_probability = L.Softmax()(token_probability)
 
     model = tf.keras.Model(inputs=[token_input_layer], outputs=[token_probability])
     return model
