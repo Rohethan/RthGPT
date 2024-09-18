@@ -37,9 +37,9 @@ def build_model(context_length:int, embedding_size:int, vocab_size:int, n_attent
 
     # passing through transformer block
     for i in range(n_attention_blocks):
-        attention_layer = L.MultiHeadAttention(attention_heads,embedding_size, name='Block '+str(i)+' attention_layer')
-        ratioed_dense_layer = L.Dense(embedding_size * after_attention_dense_ratio, name='Block '+str(i)+' dense_layer')
-        final_block_dense_layer = L.Dense(embedding_size, name='Block '+str(i)+' final_dense_layer')
+        attention_layer = L.MultiHeadAttention(attention_heads,embedding_size, name='Block_'+str(i)+'_attention_layer')
+        ratioed_dense_layer = L.Dense(embedding_size * after_attention_dense_ratio, name='Block_'+str(i)+'_dense_layer')
+        final_block_dense_layer = L.Dense(embedding_size, name='Block_'+str(i)+'_final_dense_layer')
 
         attention = attention_layer(embeddings, embeddings, use_causal_mask=True)
         ratioed_dense = ratioed_dense_layer(attention)
@@ -55,9 +55,14 @@ def build_model(context_length:int, embedding_size:int, vocab_size:int, n_attent
         token_probability = prob_selector_layer(predicted_embed)
         token_probability = L.Softmax()(token_probability)
 
-    model = tf.keras.Model(inputs=[token_input_layer], outputs=[token_probability])
+    model = tf.keras.Model(inputs=[token_input_layer, prediction_index], outputs=[token_probability])
     return model
 
 if __name__ == '__main__':
-    model = build_model(2048, 256, 4096, 32, 4, 4)
+    model = build_model(2048, 256, 1024, 4, 2, 4)
     model.summary()
+    import numpy as np
+    test_ctx = np.random.randint(1024, size=[16, 2048])
+    test_pred_indx = np.random.randint(2048, size=[16, 1])
+    print("feeding random test data")
+    model.predict([test_ctx, test_pred_indx])
