@@ -16,5 +16,5 @@ model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=
 print("model compiled")
 print("model fit start")
 generator = dataset.tensorflow_dataset_generator()
-generator = generator.batch(4).prefetch(2)
-model.fit(dataset.tensorflow_dataset_generator(), batch_size=4, epochs=1)
+generator = generator.batch(2).prefetch(2)
+model.fit(dataset.tensorflow_dataset_generator(), batch_size=2, epochs=1)

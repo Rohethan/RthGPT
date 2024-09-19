@@ -1,6 +1,29 @@
 import tensorflow as tf
 from tensorflow.keras import layers as L
 
+class PositionalEncodingLayer(tf.keras.layers.Layer):
+    def __init__(self, max_seq_len, model_dim):
+        super(PositionalEncodingLayer, self).__init__()
+        self.positional_encoding = self._get_positional_encoding(max_seq_len, model_dim)
+
+    def _get_positional_encoding(self, max_seq_len, model_dim):
+        pos = tf.range(max_seq_len, dtype=tf.float32)[:, tf.newaxis]
+        i = tf.range(model_dim, dtype=tf.float32)[tf.newaxis, :]
+
+        angle_rads = pos / tf.pow(10000, (2 * (i // 2)) / model_dim)
+
+        # apply sin to even indices in the array; 2i
+        sines = tf.sin(angle_rads[:, 0::2])
+
+        # apply cos to odd indices in the array; 2i+1
+        cosines = tf.cos(angle_rads[:, 1::2])
+
+        pos_encoding = tf.concat([sines, cosines], axis=-1)
+        pos_encoding = pos_encoding[tf.newaxis, ...]
+        return tf.cast(pos_encoding, tf.float32)
+
+    def call(self, inputs):
+        return inputs + self.positional_encoding[:, :tf.shape(inputs)[1], :]
 
 
 class EmbeddingSelector(L.Layer):
@@ -30,9 +53,11 @@ def build_model(context_length:int, embedding_size:int, vocab_size:int, n_attent
     token_input_layer = L.Input(shape=(context_length,))
     prediction_index = L.Input(shape=(1,), dtype=tf.int32)
     embedding_layer = L.Embedding(vocab_size, embedding_size)
-    positional_encodings = tf.Variable(tf.random.uniform(shape=(context_length, embedding_size), minval=0, maxval=1))
+    positional_encoding_layer = PositionalEncodingLayer(max_seq_len=context_length, model_dim=embedding_size)
+
 
     input_embeddings = embedding_layer(token_input_layer)
+    positional_encodings = positional_encoding_layer(input_embeddings)
     embeddings = input_embeddings + positional_encodings
 
     # passing through transformer block
