@@ -1,8 +1,13 @@
 import RthGPT
 
-tk = RthGPT.RthTokenizer("./wiki16k.json")
-ecded = tk.tokenizer.encode("""Je m'apelle Rohethan, et je suis un fier membre de Péguland.""")
-print("""Je m'apelle Rohethan, et je suis un fier membre de Péguland.""")
+txt = """T'as vu ? C'est dingue, tu crois pas ?
+"""
+
+tk = RthGPT.RthTokenizer("./pn_4k.json")
+ecded = tk.tokenizer.encode(txt)
+print(
+    txt
+)
 print(ecded.tokens)
 print(ecded.ids)
 print(len(ecded.tokens))

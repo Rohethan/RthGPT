@@ -21,13 +21,24 @@ class RthTokenizer:
             self.tokenizer.decoder = tdc.ByteLevel()
             self.vocab_size = vocab_size
 
-    def train_tokenizer(self, generator, save_name:str):
+    def train_tokenizer_from_generator(self, generator, save_name:str):
         self.trainer = tr.BpeTrainer(
             vocab_size=self.vocab_size,
             initial_alphabet=tpt.ByteLevel.alphabet(),
-            special_tokens=["<[PAD]>", "<[BOS]>", "<[EOS]>"]
+            special_tokens=["<[PAD]>"]
         )
         self.tokenizer.train_from_iterator(generator, trainer=self.trainer)
+        self.tokenizer.save(save_name)
+
+    def train_tokenizer_from_folder(self, path, save_name:str):
+        self.trainer = tr.BpeTrainer(
+            vocab_size=self.vocab_size,
+            initial_alphabet=tpt.ByteLevel.alphabet(),
+            special_tokens=["<[PAD]>"]
+        )
+        from glob import glob
+        txt_files = glob(os.path.join(path, "*.txt"))
+        self.tokenizer.train(txt_files, trainer=self.trainer)
         self.tokenizer.save(save_name)
 
     def tokenize(self, seq):

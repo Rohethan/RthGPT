@@ -1,6 +1,7 @@
 import tensorflow as tf
 import numpy as np
 
+
 class HuggingfaceWikipediaFr():
     def __init__(self):
         from datasets import load_dataset
