@@ -22,8 +22,8 @@ model.compile(optimizer=optimizer, loss='sparse_categorical_crossentropy', metri
 print("model compiled")
 print("model fit start")
 generator = dataset.tensorflow_dataset_generator()
-batch_size = 16
+batch_size = 512
 print("estimated to have", 38857/batch_size, " iters per epoch")
-generator = generator.repeat().batch(batch_size).prefetch(2)
+generator = generator.batch(batch_size).prefetch(2)
 model.fit(dataset.tensorflow_dataset_generator(), batch_size=batch_size, epochs=1000) #supposed to have 38857 elems per epoch, batched
 model.save_weights('./weights/model')
