@@ -1,9 +1,9 @@
 import RthGPT
-
+tk = RthGPT.RthTokenizer("./pn_4k.json")
 txt = """T'as vu ? C'est dingue, tu crois pas ?
 """
 
-tk = RthGPT.RthTokenizer("./pn_4k.json")
+
 ecded = tk.tokenizer.encode(txt)
 print(
     txt
