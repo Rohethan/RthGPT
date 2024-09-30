@@ -48,7 +48,7 @@ class ProbabilitySelector(L.Layer):
     def call(self, inputs, **kwargs):
         return tf.linalg.matmul(inputs, self.embeddings, transpose_b=True)
 
-def build_model(context_length:int, embedding_size:int, vocab_size:int, n_attention_blocks:int, attention_heads:int, after_attention_dense_ratio:int):
+def build_model(context_length:int, embedding_size:int, vocab_size:int, n_attention_blocks:int, attention_heads:int, after_attention_dense_ratio:int, dropout=0.05):
     # Preparing the input to enter the transformer blocks
     token_input_layer = L.Input(shape=(context_length,))
     prediction_index = L.Input(shape=(1,), dtype=tf.int32)
@@ -62,23 +62,28 @@ def build_model(context_length:int, embedding_size:int, vocab_size:int, n_attent
 
     # passing through transformer block
     for i in range(n_attention_blocks):
-        attention_layer = L.MultiHeadAttention(attention_heads,embedding_size, name='Block_'+str(i)+'_attention_layer')
+        attention_layer = L.MultiHeadAttention(attention_heads,embedding_size, name='Block_'+str(i)+'_attention_layer', dropout=dropout)
         ratioed_dense_layer = L.Dense(embedding_size * after_attention_dense_ratio, name='Block_'+str(i)+'_dense_layer')
         final_block_dense_layer = L.Dense(embedding_size, name='Block_'+str(i)+'_final_dense_layer')
+        dropout = L.Dropout(dropout, name='Block_'+str(i)+'_dropout')
 
         attention = attention_layer(embeddings, embeddings, use_causal_mask=True)
         ratioed_dense = ratioed_dense_layer(attention)
+        ratioed_dense = dropout(ratioed_dense)
         final_block_dense = final_block_dense_layer(ratioed_dense)
+        final_block_dense = dropout(ratioed_dense)
+
+
 
         embeddings = final_block_dense
 
-        # We select the vector of shape [batch_size, embedding_size] in embeddings of shape [batch_size, context_length, embedding_size] based on value in prediction_index
-        selected_embedding_layer = EmbeddingSelector()
-        predicted_embed = selected_embedding_layer(embeddings, prediction_index)
+    # We select the vector of shape [batch_size, embedding_size] in embeddings of shape [batch_size, context_length, embedding_size] based on value in prediction_index
+    selected_embedding_layer = EmbeddingSelector()
+    predicted_embed = selected_embedding_layer(embeddings, prediction_index)
 
-        prob_selector_layer = ProbabilitySelector(embedding_layer)
-        token_probability = prob_selector_layer(predicted_embed)
-        token_probability = L.Softmax()(token_probability)
+    prob_selector_layer = ProbabilitySelector(embedding_layer)
+    token_probability = prob_selector_layer(predicted_embed)
+    token_probability = L.Softmax()(token_probability)
 
     model = tf.keras.Model(inputs=[token_input_layer, prediction_index], outputs=[token_probability])
     return model
