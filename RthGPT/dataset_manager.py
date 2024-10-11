@@ -22,15 +22,14 @@ class PetitNicolasDataset():
 
                 ctx_arr = np.array(increasing_context).reshape(1, -1)
                 guess_token = np.array(token).reshape(1, -1)
-                guess_index = np.array(i).reshape(1, -1)
 
-                yield (ctx_arr, guess_index), guess_token
+                yield ctx_arr, guess_token
 
                 increasing_context[i] = token
                 i += 1
     def tensorflow_dataset_generator(self):
-        output_type = (tf.int32, tf.int32), tf.int32
-        output_shape = (tf.TensorShape([None, self.ctx_lenght]), tf.TensorShape([None, 1])), tf.TensorShape([None, 1])
+        output_type = tf.int32, tf.int32
+        output_shape = tf.TensorShape([None, self.ctx_lenght]), tf.TensorShape([None, 1])
         tfds = tf.data.Dataset.from_generator(self.tokenized_data_generator, output_types=output_type, output_shapes=output_shape)
         return tfds
 

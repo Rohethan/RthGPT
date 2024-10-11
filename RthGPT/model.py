@@ -48,51 +48,44 @@ class ProbabilitySelector(L.Layer):
     def call(self, inputs, **kwargs):
         return tf.linalg.matmul(inputs, self.embeddings, transpose_b=True)
 
-def build_model(context_length:int, embedding_size:int, vocab_size:int, n_attention_blocks:int, attention_heads:int, after_attention_dense_ratio:int, dropout_rate=0.05):
+def build_model(context_length:int, embedding_size:int, vocab_size:int, n_recurrent_blocks:int,recurrent_block_size:int):
     # Preparing the input to enter the transformer blocks
     token_input_layer = L.Input(shape=(context_length,))
-    prediction_index = L.Input(shape=(1,), dtype=tf.int32)
     embedding_layer = L.Embedding(vocab_size, embedding_size)
-    positional_encoding_layer = PositionalEncodingLayer(max_seq_len=context_length, model_dim=embedding_size)
-
 
     input_embeddings = embedding_layer(token_input_layer)
-    positional_encodings = positional_encoding_layer(input_embeddings)
-    embeddings = input_embeddings + positional_encodings
+    embeddings = input_embeddings
 
-    # passing through transformer block
-    for i in range(n_attention_blocks):
-        attention_layer = L.MultiHeadAttention(attention_heads, embedding_size, name='Block_'+str(i)+'_attention_layer', dropout=dropout_rate)
-        ratioed_dense_layer = L.Dense(embedding_size * after_attention_dense_ratio, name='Block_'+str(i)+'_dense_layer')
-        final_block_dense_layer = L.Dense(embedding_size, name='Block_'+str(i)+'_final_dense_layer')
-        dropout_layer = L.Dropout(dropout_rate, name='Block_' + str(i) + '_dropout')
+    # passing through Recurrent block
+    for i in range(n_recurrent_blocks):
+        recurrent_layer = L.LSTM(recurrent_block_size, return_sequences=True)
+        dense_layer = L.Dense(embedding_size)
+        activation = L.Activation('relu')
 
-        attention = attention_layer(embeddings, embeddings, use_causal_mask=True)
-        ratioed_dense = ratioed_dense_layer(attention)
-        ratioed_dense = dropout_layer(ratioed_dense)
-        final_block_dense = final_block_dense_layer(ratioed_dense)
-        final_block_dense = dropout_layer(final_block_dense)
+        rnn_out = dense_layer(embeddings)
+        dense_out = dense_layer(rnn_out)
+        act_out = activation(dense_out)
+
+        embeddings = act_out
+
+    #token_selection_layer
+
+    first_simplernn_layer = L.SimpleRNN(context_length)
+    identification_dense_layer = L.Dense(vocab_size)
+
+    tokens_summarization = first_simplernn_layer(embeddings)
+    summarization_identification = identification_dense_layer(tokens_summarization)
 
 
+    token_probability = L.Softmax()(summarization_identification)
 
-        embeddings = final_block_dense
-
-    # We select the vector of shape [batch_size, embedding_size] in embeddings of shape [batch_size, context_length, embedding_size] based on value in prediction_index
-    selected_embedding_layer = EmbeddingSelector()
-    predicted_embed = selected_embedding_layer(embeddings, prediction_index)
-
-    prob_selector_layer = ProbabilitySelector(embedding_layer)
-    token_probability = prob_selector_layer(predicted_embed)
-    token_probability = L.Softmax()(token_probability)
-
-    model = tf.keras.Model(inputs=[token_input_layer, prediction_index], outputs=[token_probability])
+    model = tf.keras.Model(inputs=token_input_layer, outputs=token_probability)
     return model
 
 if __name__ == '__main__':
-    model = build_model(2048, 256, 1024, 4, 2, 4)
+    model = build_model(2048, 256, 1024, 16, 384)
     model.summary()
     import numpy as np
-    test_ctx = np.random.randint(1024, size=[16, 2048])
-    test_pred_indx = np.random.randint(2048, size=[16, 1])
+    test_ctx = np.random.randint(1024, size=[1,2048])
     print("feeding random test data")
-    model.predict([test_ctx, test_pred_indx])
+    model.predict(test_ctx)
